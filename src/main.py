@@ -1,6 +1,7 @@
 import LoadData
 import matplotlib.pyplot as plt
 
+
 def main():
     print("Hello from VS Code and GitHub!")
 
@@ -13,9 +14,9 @@ if __name__ == "__main__":
     # test()
     pair = LoadData.load_data()
     cointegration_result = LoadData.cointegration_test(pair)
-    print(f"alpha = {cointegration_result['alpha']:.6f}")
-    print(f"beta  = {cointegration_result['beta']:.6f}")
-    print(cointegration_result["result"].head())
+    print(f"Intercept = {cointegration_result['Intercept']:.6f}")
+    print(f"Hedge Ratio  = {cointegration_result['HedgeRatio']:.6f}")
+    #print(cointegration_result["Result"].head())
     # pair plot for visualization
     # plt.figure(figsize=(12, 6))
     # plt.plot(pair.index, pair.iloc[:, 0], label=pair.columns[0])
@@ -27,10 +28,10 @@ if __name__ == "__main__":
     # plt.show()
     # spread plot for visualization
     plt.figure(figsize=(12, 6))
-    plt.plot(cointegration_result["result"].index, cointegration_result["spread"], label='Spread')
+    plt.plot(cointegration_result["Result"].index, cointegration_result["Spread"], label='Spread')
     # draw dotted line at 0 to see mean reverting behavior
     # plt.hline(y=0, color='r', linestyle='--', label='No spread')
-    plt.title(f'Spread between {cointegration_result["ticker1"]} and {cointegration_result["ticker2"]}')
+    plt.title(f'Spread between {cointegration_result["Ticker A"]} and {cointegration_result["Ticker B"]}')
     plt.xlabel('Date')  
     plt.ylabel('Spread')
     plt.legend()
