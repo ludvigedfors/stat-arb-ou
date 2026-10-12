@@ -14,8 +14,8 @@ if __name__ == "__main__":
     # test()
     pair = LoadData.load_data()
     cointegration_result = LoadData.cointegration_test(pair)
-    print(f"Intercept = {cointegration_result['Intercept']:.6f}")
-    print(f"Hedge Ratio  = {cointegration_result['HedgeRatio']:.6f}")
+    # print(f"Intercept = {cointegration_result['Intercept']:.6f}")
+    # print(f"Hedge Ratio  = {cointegration_result['HedgeRatio']:.6f}")
     #print(cointegration_result["Result"].head())
     # pair plot for visualization
     # plt.figure(figsize=(12, 6))

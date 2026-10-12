@@ -5,18 +5,14 @@ import statsmodels.api as sm
 from statsmodels.tsa.stattools import coint
 from statsmodels.tsa.vector_ar.vecm import coint_johansen
 
-def load_data(A = 'GOOG', B = 'GOOGL', start_date='2020-01-01', end_date='2023-01-01'):
-    # Download historical data for the two stocks
-    data = yf.download([A, B], start=start_date, end=end_date)
-    # print(data.head())  # Display the first few rows of data
-    close_price = data['Close']
-    # print(close_price.head())  # Display the first few rows of close_price
-    return close_price  
 
-def engle_granger_test(data, significance=0.05): 
-    '''Good if i know B is dependent on A
-    not if i dont know which is dependent on which
-    otherwise run both ways'''
+def load_data(A='GOOG', B='GOOGL', start_date='2020-01-01', end_date='2023-01-01'):
+    data = yf.download([A, B], start=start_date, end=end_date)
+    close_price = data['Close']
+    return close_price
+
+
+def engle_granger_test(data, significance=0.05):
     if data is None:
         raise ValueError("Data not loaded. Please call load_data() first.")
 
@@ -37,28 +33,17 @@ def engle_granger_test(data, significance=0.05):
 
 
 def johansen_test(data: pd.DataFrame, det_order: int = 0, k_ar_diff: int = 1, significance_level: str = "5%"):
-    """more robust test for cointegration, 
-    can handle multiple time series and 
-    does not require specifying which series is dependent on the other.
-    Needs large sample though
-    det_order = 0, assume no trend in the data
-    k_ar_diff = 1 for daily closing prices, 0 for intra day returns are basically noise
-    """
     sig_index = {"1%": 2, "5%": 1, "10%": 0}[significance_level]
 
     result = coint_johansen(data, det_order, k_ar_diff)
 
-    trace_stats = result.lr1  # trace statistics
-    trace_cvs = result.cvt[:, sig_index]  # critical values for trace
+    trace_stats = result.lr1
+    trace_cvs = result.cvt[:, sig_index]
 
-    max_eig_stats = result.lr2  # max eigenvalue statistics
+    max_eig_stats = result.lr2
     max_eig_cvs = result.cvm[:, sig_index]
 
-    # # Count cointegrating relations using the trace test
-    # n_coint_trace = sum(t > c for t, c in zip(trace_stats, trace_cvs))
-    # n_coint_eigen = sum(t > c for t, c in zip(max_eig_stats, max_eig_cvs))
-
-    # Proper sequential rank determination
+    # Sequential rank determination
     n_coint_trace = 0
     for stat, cv in zip(trace_stats, trace_cvs):
         if stat > cv:
@@ -82,13 +67,12 @@ def johansen_test(data: pd.DataFrame, det_order: int = 0, k_ar_diff: int = 1, si
         "n_cointegrating_trace": n_coint_trace,
         "n_cointegrating_eigen": n_coint_eigen,
     }
-    
-    
-def cointegration_test(data, test_type = 1, print_results=True):
+
+
+def cointegration_test(data, test_type=2, print_results=True):
     if data is None:
         raise ValueError("Data not loaded. Please call load_data() first.")
 
-    # choose the pair with the strongest cointegration signal
     log_data = np.log(data)
 
     best_pair = None
@@ -100,38 +84,56 @@ def cointegration_test(data, test_type = 1, print_results=True):
             pair = log_data[[ticker1, ticker2]].dropna()
 
             if test_type == 1:
-                # Engle-Granger: smaller p-value = stronger evidence
                 stats = engle_granger_test(pair)
-                score = -min(stats["p_value"])
+                score = -stats["min_p_value"]
             elif test_type == 2:
-                # Johansen: more cointegrating relations and bigger gap to critical value = stronger evidence
                 joh = johansen_test(pair)
-                score = joh["n_cointegrating_trace"] + np.mean(
-                    np.maximum(joh["trace_statistics"] - joh["trace_critical_values"], 0)
-                )
+                # require rank == 1 (reject r=0, but do not allow r=2 which means already stationary).
+                # score by excess trace statistic above critical threshold.
+                if joh["n_cointegrating_trace"] == 1:
+                    score = joh["trace_statistics"][0] - joh["trace_critical_values"][0]
+                else:
+                    score = -np.inf  # Discard non-cointegrated pairs
+                stats = joh
             else:
                 raise ValueError("test_type must be 1 (Engle-Granger) or 2 (Johansen)")
 
             if score > best_score:
                 best_score = score
                 best_pair = (ticker1, ticker2, pair)
+                best_stats = stats
 
-    if best_pair is None:
-        raise ValueError("No valid pair found for cointegration analysis.")
+    if best_pair is None or best_score == -np.inf:
+        raise ValueError("No valid cointegrated pair found.")
 
     ticker1, ticker2, pair_data = best_pair
 
-    log_pair = np.log(pair_data).dropna()
+    log_pair = pair_data
 
-    # OLS: ticker2_t = alpha + beta * ticker1_t + epsilon_t
     A = log_pair[ticker1].to_numpy()
     B = log_pair[ticker2].to_numpy()
-    X = np.column_stack([np.ones(len(A)), A])
 
-    alpha, beta = np.linalg.lstsq(X, B, rcond=None)[0]
-    epsilon = B - (alpha + beta * A)
+    # use Johansen's cointegrating vector when test_type==2 to maintain directional symmetry
+    if test_type == 1:
+        # OLS regression: B = alpha + beta * A
+        X = np.column_stack([np.ones(len(A)), A])
+        alpha, beta = np.linalg.lstsq(X, B, rcond=None)[0]
+        epsilon = B - (alpha + beta * A)
+    else:
+        # Johansen eigenvector: w1 * A + w2 * B = stationary spread
+        evec = best_stats["cointegrating_vectors"][:, 0]
+        beta = -evec[0] / evec[1]
+        raw_spread = B - beta * A
+        alpha = float(np.mean(raw_spread))
+        epsilon = raw_spread - alpha
 
-    result = pd.DataFrame(
+    # calculate Ornstein-Uhlenbeck half-life on the resulting spread
+    s_lag = epsilon[:-1]
+    s_diff = np.diff(epsilon)
+    reg = np.linalg.lstsq(np.column_stack([np.ones(len(s_lag)), s_lag]), s_diff, rcond=None)[0]
+    half_life = -np.log(2) / reg[1] if reg[1] < 0 else np.inf
+
+    result_df = pd.DataFrame(
         {
             "log_A": A,
             "log_B": B,
@@ -141,28 +143,23 @@ def cointegration_test(data, test_type = 1, print_results=True):
         index=log_pair.index,
     )
 
+    # print the precomputed results of the best pair, rather than re-running on the full raw dataset
     if print_results:
-            if test_type == 1:
-                result = engle_granger_test(data)
-                print("Engle-Granger Cointegration Test Results")
-                print("=" * 50)
-                print(f"Cointegrated (A on B): {result['cointegrated'][0]}, p-value: {result['p_value'][0]:.6f}")
-                print(f"Cointegrated (B on A): {result['cointegrated'][1]}, p-value: {result['p_value'][1]:.6f}")
-    
-            elif test_type == 2:
-                result = johansen_test(data)
-                print("Johansen Cointegration Test Results")
-                print("=" * 50)
-                for i in range(len(data.columns)):
-                    print(
-                        f"# of cointegrating relations <= {i}: trace stat = {result['trace_statistics'][i]:.2f}, "
-                        f"critical value = {result['trace_critical_values'][i]:.2f}, "
-                        f"reject = {result['trace_statistics'][i] > result['trace_critical_values'][i]}")
-                    
-                print(f"\nNumber of cointegrating relations (trace): "f"{result['n_cointegrating_trace']}")
-    
-                print(f"Number of cointegrating relations (max eigenvalue): "f"{result['n_cointegrating_eigen']}")
-    
+        print("=" * 50)
+        print(f"Selected Pair: {ticker1} and {ticker2}")
+        print("=" * 50)
+        if test_type == 1:
+            print(f"Engle-Granger Cointegration Test Results")
+            print(f"Cointegrated ({ticker1} on {ticker2}): {best_stats['cointegrated'][0]}, p-value: {best_stats['p_value'][0]:.6f}")
+            print(f"Cointegrated ({ticker2} on {ticker1}): {best_stats['cointegrated'][1]}, p-value: {best_stats['p_value'][1]:.6f}")
+        elif test_type == 2:
+            print(f"Johansen Cointegration Test Results")
+            for i in range(2):
+                t_stat = best_stats['trace_statistics'][i]
+                c_val = best_stats['trace_critical_values'][i]
+                print(f"# of cointegrating relations <= {i}: trace stat = {t_stat:.2f}, critical value = {c_val:.2f}, reject = {t_stat > c_val}")
+            print(f"Cointegrating Rank: {best_stats['n_cointegrating_trace']}")
+        print(f"Half-life of Mean Reversion: {half_life:.2f} days")
 
     return {
         "Ticker A": ticker1,
@@ -170,6 +167,7 @@ def cointegration_test(data, test_type = 1, print_results=True):
         "Intercept": alpha,
         "HedgeRatio": beta,
         "Spread": epsilon,
-        "Result": result,
-        "selection_score": best_score}
-    
+        "HalfLife": half_life,
+        "Result": result_df,
+        "selection_score": best_score,
+    }
