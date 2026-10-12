@@ -1,4 +1,4 @@
-# My Python Project
+# Stat arb. 
 
 Python project, statistical arbitrage using Ornstein-Uhlenbeck process
 
