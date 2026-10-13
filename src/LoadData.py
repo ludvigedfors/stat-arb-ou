@@ -6,7 +6,7 @@ from statsmodels.tsa.stattools import coint
 from statsmodels.tsa.vector_ar.vecm import coint_johansen
 
 
-def load_data(A='GOOG', B='GOOGL', start_date='2020-01-01', end_date='2023-01-01'):
+def load_data(A='GOOG', B='GOOGL', start_date='2025-10-01', end_date='2026-10-01'):
     data = yf.download([A, B], start=start_date, end=end_date)
     close_price = data['Close']
     return close_price
@@ -155,6 +155,7 @@ def cointegration_test(data, test_type=2, print_results=True):
         },
         index=log_pair.index,
     )
+    spread_series = pd.Series(epsilon, index=log_pair.index, name="spread")
 
     # print the precomputed results of the best pair
     if print_results:
@@ -179,7 +180,7 @@ def cointegration_test(data, test_type=2, print_results=True):
         "Ticker B": ticker2,
         "Intercept": alpha,
         "HedgeRatio": beta,
-        "Spread": epsilon,
+        "Spread": spread_series,
         "HalfLife": half_life,
         "Result": result_df,
         "selection_score": best_score,
