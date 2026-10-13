@@ -6,8 +6,9 @@ from statsmodels.tsa.stattools import coint
 from statsmodels.tsa.vector_ar.vecm import coint_johansen
 
 
-def load_data(A='GOOG', B='GOOGL', start_date='2025-10-01', end_date='2026-10-01'):
-    data = yf.download([A, B], start=start_date, end=end_date)
+
+def load_data(stocks, start_date='2025-10-01', end_date='2026-10-01'):
+    data = yf.download(stocks, start=start_date, end=end_date, auto_adjust=True)
     close_price = data['Close']
     return close_price
 
@@ -32,7 +33,7 @@ def engle_granger_test(data, significance=0.05):
     }
 
 
-def johansen_test(data: pd.DataFrame, det_order: int = 0, k_ar_diff: int = 1, significance_level: str = "5%"):
+def johansen_test(data: pd.DataFrame, det_order: int = 0, k_ar_diff: int = 1, significance_level: str = "10%"):
     sig_index = {"1%": 2, "5%": 1, "10%": 0}[significance_level]
 
     result = coint_johansen(data, det_order, k_ar_diff)

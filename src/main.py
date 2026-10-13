@@ -9,8 +9,15 @@ if __name__ == "__main__":
     # main()
     # test()
     # pairs: KO/PEP, GOOG/GOOGL
-    pair = LoadData.load_data(A='KO', B='PEP')
-    cointegration_result = LoadData.cointegration_test(pair)
+    # pair = LoadData.load_data(A='SWED-A.ST', B='SEB-A.ST', start_date='2025-10-01', end_date='2026-10-01')
+    semi_capex = ["LRCX", "AMAT", "KLAC"]
+    refiners = ["VLO", "MPC", "PSX", "DK"]
+    gold_miners = ["NEM", "AEM", "GOLD", "KGC"]
+    regional_banks = ["FITB", "HBAN", "RF", "KEY"]
+
+    data = LoadData.load_data(semi_capex, start_date='2021-10-01', end_date='2026-10-01')
+    cointegration_result = LoadData.cointegration_test(data)
+    pair = data[[cointegration_result["Ticker A"], cointegration_result["Ticker B"]]]
     # print(f"Intercept = {cointegration_result['Intercept']:.6f}")
     # print(f"Hedge Ratio  = {cointegration_result['HedgeRatio']:.6f}")
     #print(cointegration_result["Result"].head())
@@ -29,7 +36,7 @@ if __name__ == "__main__":
         tickA = cointegration_result["Ticker A"],
         tickB = cointegration_result["Ticker B"],
         beta=cointegration_result["HedgeRatio"],
-        transaction_cost=0.0,
+        transaction_cost=5.0,
     )
 
     print("\n--- Strategy Performance Metrics ---")
