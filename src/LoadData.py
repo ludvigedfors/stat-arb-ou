@@ -68,6 +68,21 @@ def johansen_test(data: pd.DataFrame, det_order: int = 0, k_ar_diff: int = 1, si
         "n_cointegrating_eigen": n_coint_eigen,
     }
 
+def ornstein_uhlenbeck_half_life(spread):
+    # calculate Ornstein-Uhlenbeck half-life on the resulting spread
+    # dS_t = theta * (mu - S_t) * dt + sigma * dW_t
+    # {without noise} -> d(S_t-mu)/dt = -theta * (S_t-mu) 
+    # -> S_t-mu = (S_0-mu) * exp(-theta * t)
+    # t_half = ln(2)/theta
+    # dS ~ DeltaS -> DeltaS = theta*(mu-S_t-1) * 1 + e
+    # OLS beta = -theta 
+
+        s_lag = spread[:-1]
+        s_diff = np.diff(spread)
+        reg = np.linalg.lstsq(np.column_stack([np.ones(len(s_lag)), s_lag]), s_diff, rcond=None)[0]
+        half_life = -np.log(2) / reg[1] if reg[1] < 0 else np.inf
+        return half_life
+
 
 def cointegration_test(data, test_type=2, print_results=True):
     if data is None:
@@ -119,19 +134,17 @@ def cointegration_test(data, test_type=2, print_results=True):
         X = np.column_stack([np.ones(len(A)), A])
         alpha, beta = np.linalg.lstsq(X, B, rcond=None)[0]
         epsilon = B - (alpha + beta * A)
-    else:
+    elif test_type == 2:
         # Johansen eigenvector: w1 * A + w2 * B = stationary spread
         evec = best_stats["cointegrating_vectors"][:, 0]
         beta = -evec[0] / evec[1]
         raw_spread = B - beta * A
         alpha = float(np.mean(raw_spread))
         epsilon = raw_spread - alpha
-
-    # calculate Ornstein-Uhlenbeck half-life on the resulting spread
-    s_lag = epsilon[:-1]
-    s_diff = np.diff(epsilon)
-    reg = np.linalg.lstsq(np.column_stack([np.ones(len(s_lag)), s_lag]), s_diff, rcond=None)[0]
-    half_life = -np.log(2) / reg[1] if reg[1] < 0 else np.inf
+    else:
+        raise ValueError("test_type must be 1 (Engle-Granger) or 2 (Johansen)")
+    
+    half_life = ornstein_uhlenbeck_half_life(epsilon)
 
     result_df = pd.DataFrame(
         {
@@ -143,7 +156,7 @@ def cointegration_test(data, test_type=2, print_results=True):
         index=log_pair.index,
     )
 
-    # print the precomputed results of the best pair, rather than re-running on the full raw dataset
+    # print the precomputed results of the best pair
     if print_results:
         print("=" * 50)
         print(f"Selected Pair: {ticker1} and {ticker2}")
