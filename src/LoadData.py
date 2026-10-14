@@ -33,7 +33,7 @@ def engle_granger_test(data, significance=0.05):
     }
 
 
-def johansen_test(data: pd.DataFrame, det_order: int = 0, k_ar_diff: int = 1, significance_level: str = "10%"):
+def johansen_test(data, det_order = 0, k_ar_diff = 1, significance_level = "5%"):
     sig_index = {"1%": 2, "5%": 1, "10%": 0}[significance_level]
 
     result = coint_johansen(data, det_order, k_ar_diff)
@@ -103,13 +103,23 @@ def cointegration_test(data, test_type=2, print_results=True):
                 stats = engle_granger_test(pair)
                 score = -stats["min_p_value"]
             elif test_type == 2:
-                joh = johansen_test(pair)
-                # require rank == 1 (reject r=0, but do not allow r=2 which means already stationary).
-                # score by excess trace statistic above critical threshold.
-                if joh["n_cointegrating_trace"] == 1:
-                    score = joh["trace_statistics"][0] - joh["trace_critical_values"][0]
+                joh = johansen_test(pair, det_order=1, k_ar_diff=1, significance_level="5%")
+
+                # demand rank = 1 for trace and eig
+                trace_rank_1 = (joh["trace_statistics"][0] > joh["trace_critical_values"][0]) and \
+                            (joh["trace_statistics"][1] < joh["trace_critical_values"][1])
+                
+                eigen_rank_1 = (joh["max_eigen_statistics"][0] > joh["max_eigen_critical_values"][0]) and \
+                            (joh["max_eigen_statistics"][1] < joh["max_eigen_critical_values"][1])
+
+                evec = joh["cointegrating_vectors"][:, 0]
+                beta_candidate = -evec[0] / evec[1] if evec[1] != 0 else 0
+
+                if trace_rank_1 and eigen_rank_1 and beta_candidate > 0:
+                    # normalised score 
+                    score = (joh["trace_statistics"][0] / joh["trace_critical_values"][0])
                 else:
-                    score = -np.inf  # Discard non-cointegrated pairs
+                    score = -np.inf
                 stats = joh
             else:
                 raise ValueError("test_type must be 1 (Engle-Granger) or 2 (Johansen)")

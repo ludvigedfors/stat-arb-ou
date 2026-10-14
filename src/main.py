@@ -8,14 +8,13 @@ import numpy as np
 if __name__ == "__main__":
     # main()
     # test()
-    # pairs: KO/PEP, GOOG/GOOGL
-    # pair = LoadData.load_data(A='SWED-A.ST', B='SEB-A.ST', start_date='2025-10-01', end_date='2026-10-01')
+    beverage = ["KO", "PEP", "MNST", "BF-B"]
     semi_capex = ["LRCX", "AMAT", "KLAC"]
     refiners = ["VLO", "MPC", "PSX", "DK"]
     gold_miners = ["NEM", "AEM", "GOLD", "KGC"]
     regional_banks = ["FITB", "HBAN", "RF", "KEY"]
 
-    data = LoadData.load_data(semi_capex, start_date='2021-10-01', end_date='2026-10-01')
+    data = LoadData.load_data(beverage, start_date='2021-10-01', end_date='2026-10-01')
     cointegration_result = LoadData.cointegration_test(data)
     pair = data[[cointegration_result["Ticker A"], cointegration_result["Ticker B"]]]
     # print(f"Intercept = {cointegration_result['Intercept']:.6f}")
